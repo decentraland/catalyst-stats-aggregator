@@ -1,15 +1,13 @@
-import { HandlerContextWithPath } from '../../types'
+import { HandlerContextWithPath, RealmInfo, ParcelCoord } from '../../types'
 
 // The maximum amount of hot scenes returned
 const HOT_SCENES_LIMIT = 100
 
-type ParcelCoord = [number, number]
-
-type RealmInfo = {
-  serverName: string
+type CatalystInfo = {
+  realmName: string
   url: string
+  parcels: Map<string, number>
   usersCount: number
-  userParcels: ParcelCoord[]
 }
 
 export type HotSceneInfo = {
@@ -39,8 +37,32 @@ export async function hotScenesHandler(
 
   const globalStatus = await catalystStatus.getGlobalCatalystsStatus()
 
-  const globalParcelStatus = await catalystStatus.getGlobalParcelStatus(globalStatus)
-  const scenes = await content.fetchScenes(globalParcelStatus.tiles)
+  const tiles = new Set<string>()
+  const catalystsInfo: CatalystInfo[] = []
+
+  for (const catalystParcelInfo of await catalystStatus.getParcels(globalStatus)) {
+    if (!catalystParcelInfo) {
+      continue
+    }
+
+    const { url, realmName } = catalystParcelInfo
+
+    const parcels = new Map<string, number>()
+    let usersCount = 0
+    for (const {
+      peersCount,
+      parcel: { x, y }
+    } of catalystParcelInfo.parcels) {
+      usersCount += peersCount
+      const tile = `${x},${y}`
+      tiles.add(tile)
+      parcels.set(tile, peersCount)
+    }
+
+    catalystsInfo.push({ realmName, url, parcels, usersCount })
+  }
+
+  const scenes = await content.fetchScenes(Array.from(tiles))
 
   const hotScenes: HotSceneInfo[] = scenes.map((scene) => {
     const result: HotSceneInfo = {
@@ -59,7 +81,7 @@ export async function hotScenesHandler(
     const realms = new Map<string, RealmInfo>()
 
     for (const sceneParcel of scene.metadata?.scene.parcels) {
-      for (const { realmName, url, parcels, usersCount } of globalParcelStatus.parcelsByCatalyst) {
+      for (const { realmName, url, parcels, usersCount } of catalystsInfo) {
         if (parcels.has(sceneParcel)) {
           const usersInParcel = parcels.get(sceneParcel)!
           result.usersTotalCount += usersInParcel

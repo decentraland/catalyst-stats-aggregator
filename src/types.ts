@@ -50,3 +50,12 @@ export type HandlerContextWithPath<
 >
 
 export type Context<Path extends string = any> = IHttpServerComponent.PathAwareContext<GlobalContext, Path>
+
+export type ParcelCoord = [number, number]
+
+export type RealmInfo = {
+  serverName: string
+  url: string
+  usersCount: number
+  userParcels: ParcelCoord[]
+}

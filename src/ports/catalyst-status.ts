@@ -9,18 +9,18 @@ export type CatalystStatus = {
 export type CatalystParcelsInfo = {
   realmName: string
   url: string
-  usersCount: number
-  parcels: Map<string, number>
-}
-
-export type GlobalParcelsInfo = {
-  tiles: string[]
-  parcelsByCatalyst: CatalystParcelsInfo[]
+  parcels: {
+    peersCount: number
+    parcel: {
+      x: number
+      y: number
+    }
+  }[]
 }
 
 export type ICatalystStatusComponent = IBaseComponent & {
   getGlobalCatalystsStatus: () => Promise<CatalystStatus[]>
-  getGlobalParcelStatus: (status: CatalystStatus[]) => Promise<GlobalParcelsInfo>
+  getParcels: (status: CatalystStatus[]) => Promise<CatalystParcelsInfo[]>
 }
 
 export async function createCatalystStatusComponent(
@@ -33,8 +33,7 @@ export async function createCatalystStatusComponent(
   async function getGlobalCatalystsStatus(): Promise<CatalystStatus[]> {
     const count = (await contract.catalystCount()).toNumber()
 
-    const result: CatalystStatus[] = []
-
+    const urls: string[] = []
     for (let ix = 0; ix < count; ix++) {
       const id = await contract.catalystIds(ix)
       const { domain } = await contract.catalystById(id)
@@ -50,58 +49,50 @@ export async function createCatalystStatusComponent(
         baseUrl = 'https://' + baseUrl
       }
 
-      try {
-        const statusResponse = await fetch.fetch(`${baseUrl}/about`)
-        const data = await statusResponse.json()
-
-        if (data && data.configurations) {
-          result.push({ baseUrl, name: data.configurations.realmName })
-        }
-      } catch (e: any) {
-        logger.warn(`Error fetching ${baseUrl}/about: ${e.toString()}`)
-      }
+      urls.push(baseUrl)
     }
+
+    const result: CatalystStatus[] = []
+    await Promise.all(
+      urls.map(async (baseUrl: string) => {
+        try {
+          const statusResponse = await fetch.fetch(`${baseUrl}/about`)
+          const data = await statusResponse.json()
+
+          if (data && data.configurations) {
+            result.push({ baseUrl, name: data.configurations.realmName })
+          }
+        } catch (e: any) {
+          logger.warn(`Error fetching ${baseUrl}/about: ${e.toString()}`)
+        }
+      })
+    )
 
     return result
   }
 
-  async function getGlobalParcelStatus(status: CatalystStatus[]): Promise<GlobalParcelsInfo> {
-    const tiles = new Set<string>()
-    const parcelsByCatalyst: CatalystParcelsInfo[] = []
-    for (const { baseUrl, name } of status) {
-      try {
-        const response = await fetch.fetch(`${baseUrl}/stats/parcel`)
-        const data = await response.json()
+  async function getParcels(status: CatalystStatus[]): Promise<CatalystParcelsInfo[]> {
+    const result: CatalystParcelsInfo[] = []
 
-        if (!data || !data.parcels) {
-          continue
+    await Promise.all(
+      status.map(async ({ baseUrl, name }) => {
+        try {
+          const response = await fetch.fetch(`${baseUrl}/stats/parcels`)
+          const data = await response.json()
+          if (data && data.parcels) {
+            result.push({ url: baseUrl, realmName: name, parcels: data.parcels })
+          }
+        } catch (e: any) {
+          logger.warn(`Error fetching ${baseUrl}/stats/parcel: ${e.toString()}`)
         }
+      })
+    )
 
-        const parcels = new Map<string, number>()
-        let usersCount = 0
-        for (const {
-          peersCount,
-          parcel: { x, y }
-        } of data.parcels) {
-          usersCount += peersCount
-          const tile = `${x},${y}`
-          tiles.add(tile)
-          parcels.set(tile, peersCount)
-        }
-        parcelsByCatalyst.push({ realmName: name, parcels, url: baseUrl, usersCount })
-      } catch (e: any) {
-        logger.warn(`Error fetching ${baseUrl}/stats/parcel: ${e.toString()}`)
-      }
-    }
-
-    return {
-      tiles: Array.from(tiles),
-      parcelsByCatalyst
-    }
+    return result
   }
 
   return {
     getGlobalCatalystsStatus,
-    getGlobalParcelStatus
+    getParcels
   }
 }
