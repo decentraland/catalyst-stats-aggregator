@@ -19,9 +19,13 @@ export type CatalystParcelsInfo = {
 }
 
 export type ICatalystStatusComponent = IBaseComponent & {
-  getGlobalCatalystsStatus: () => Promise<CatalystStatus[]>
-  getParcels: (status: CatalystStatus[]) => Promise<CatalystParcelsInfo[]>
+  start: () => Promise<void>
+  stop: () => Promise<void>
+  getParcels: () => Promise<[number, CatalystParcelsInfo[]]>
 }
+
+const CATALYST_STATUS_EXPIRATION_TIME = 1000 * 60 * 15 // 15 mins
+const PARCELS_UPDATE_INTERVAL = 1000 * 60 // 1 min
 
 export async function createCatalystStatusComponent(
   components: Pick<BaseComponents, 'config' | 'logs' | 'fetch' | 'contract'>
@@ -71,11 +75,18 @@ export async function createCatalystStatusComponent(
     return result
   }
 
-  async function getParcels(status: CatalystStatus[]): Promise<CatalystParcelsInfo[]> {
-    const result: CatalystParcelsInfo[] = []
+  let lastGlobalCatalystStatus: CatalystStatus[] | undefined = undefined
+  let lastGlobalCatalystStatusTime = 0
 
+  async function fetchParcels(): Promise<CatalystParcelsInfo[]> {
+    if (!lastGlobalCatalystStatus || Date.now() - lastGlobalCatalystStatusTime > CATALYST_STATUS_EXPIRATION_TIME) {
+      lastGlobalCatalystStatus = await getGlobalCatalystsStatus()
+      lastGlobalCatalystStatusTime = Date.now()
+    }
+
+    const result: CatalystParcelsInfo[] = []
     await Promise.all(
-      status.map(async ({ baseUrl, name }) => {
+      lastGlobalCatalystStatus.map(async ({ baseUrl, name }) => {
         try {
           const response = await fetch.fetch(`${baseUrl}/stats/parcels`)
           const data = await response.json()
@@ -91,8 +102,39 @@ export async function createCatalystStatusComponent(
     return result
   }
 
+  let lastParcelsTime: number = 0
+  let lastParcels: CatalystParcelsInfo[] | undefined = undefined
+
+  async function getParcels(): Promise<[number, CatalystParcelsInfo[]]> {
+    if (!lastParcels) {
+      lastParcels = await fetchParcels()
+      lastParcelsTime = Date.now()
+    }
+
+    return [lastParcelsTime, lastParcels]
+  }
+
+  let updateInterval: NodeJS.Timer | undefined = undefined
+
+  async function start() {
+    lastParcels = await fetchParcels()
+    lastParcelsTime = Date.now()
+
+    updateInterval = setInterval(async () => {
+      lastParcels = await fetchParcels()
+      lastParcelsTime = Date.now()
+    }, PARCELS_UPDATE_INTERVAL)
+  }
+
+  async function stop() {
+    if (updateInterval) {
+      clearInterval(updateInterval)
+    }
+  }
+
   return {
-    getGlobalCatalystsStatus,
+    start,
+    stop,
     getParcels
   }
 }

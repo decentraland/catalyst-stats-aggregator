@@ -34,13 +34,12 @@ export async function hotScenesHandler(
   const {
     components: { catalystStatus, content }
   } = context
-
-  const globalStatus = await catalystStatus.getGlobalCatalystsStatus()
+  const [time, info] = await catalystStatus.getParcels()
 
   const tiles = new Set<string>()
   const catalystsInfo: CatalystInfo[] = []
 
-  for (const catalystParcelInfo of await catalystStatus.getParcels(globalStatus)) {
+  for (const catalystParcelInfo of info) {
     if (!catalystParcelInfo) {
       continue
     }
@@ -103,10 +102,10 @@ export async function hotScenesHandler(
 
   const value = hotScenes.sort((scene1, scene2) => scene2.usersTotalCount - scene1.usersTotalCount)
 
-  // TODO
-  // res.setHeader('Last-Modified', hotScenesLastUpdate.toUTCString())
-
   return {
+    headers: {
+      'Last-Modified': new Date(time).toUTCString()
+    },
     body: value.slice(0, HOT_SCENES_LIMIT)
   }
 }

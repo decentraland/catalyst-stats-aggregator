@@ -8,10 +8,9 @@ export async function realmsHandler(
     components: { catalystStatus }
   } = context
 
-  const globalStatus = await catalystStatus.getGlobalCatalystsStatus()
-
+  const [time, info] = await catalystStatus.getParcels()
   const realms: RealmInfo[] = []
-  for (const catalystParcelInfo of await catalystStatus.getParcels(globalStatus)) {
+  for (const catalystParcelInfo of info) {
     if (!catalystParcelInfo) {
       continue
     }
@@ -32,10 +31,11 @@ export async function realmsHandler(
 
     realms.push({ serverName: realmName, url, userParcels, usersCount })
   }
-  // TODO
-  // res.setHeader('Last-Modified', hotScenesLastUpdate.toUTCString())
 
   return {
+    headers: {
+      'Last-Modified': new Date(time).toUTCString()
+    },
     body: realms
   }
 }
