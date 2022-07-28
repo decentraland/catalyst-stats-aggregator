@@ -2,7 +2,7 @@ import { HandlerContextWithPath, RealmInfo, ParcelCoord } from '../../types'
 
 // handlers arguments only type what they need, to make unit testing easier
 export async function realmsHandler(
-  context: Pick<HandlerContextWithPath<'catalystStatus' | 'content', '/hot-scenes'>, 'url' | 'components'>
+  context: Pick<HandlerContextWithPath<'catalystStatus', '/realms'>, 'url' | 'components'>
 ) {
   const {
     components: { catalystStatus }

@@ -30,7 +30,7 @@ export async function initComponents(): Promise<AppComponents> {
   )
 
   const contract = await catalystRegistryForProvider(ethereumProvider)
-  const catalystStatus = await createCatalystStatusComponent({ config, logs, fetch, contract })
+  const catalystStatus = await createCatalystStatusComponent({ logs, fetch, contract })
   const content = await createContentComponent({ config })
 
   return {

@@ -19,22 +19,27 @@ export type CatalystParcelsInfo = {
 }
 
 export type ICatalystStatusComponent = IBaseComponent & {
-  start: () => Promise<void>
-  stop: () => Promise<void>
-  getParcels: () => Promise<[number, CatalystParcelsInfo[]]>
+  start(): Promise<void>
+  stop(): Promise<void>
+  getParcels(): Promise<[number, CatalystParcelsInfo[]]>
+}
+
+export type IFullCatalystStatusComponent = ICatalystStatusComponent & {
+  fetchParcels(catalysts: CatalystStatus[]): Promise<CatalystParcelsInfo[]>
+  fetchCatalystsStatus(): Promise<CatalystStatus[]>
 }
 
 const CATALYST_STATUS_EXPIRATION_TIME = 1000 * 60 * 15 // 15 mins
 const PARCELS_UPDATE_INTERVAL = 1000 * 60 // 1 min
 
 export async function createCatalystStatusComponent(
-  components: Pick<BaseComponents, 'config' | 'logs' | 'fetch' | 'contract'>
-): Promise<ICatalystStatusComponent> {
+  components: Pick<BaseComponents, 'logs' | 'fetch' | 'contract'>
+): Promise<IFullCatalystStatusComponent> {
   const { logs, fetch, contract } = components
 
   const logger = logs.getLogger('catalyst-status-component')
 
-  async function getGlobalCatalystsStatus(): Promise<CatalystStatus[]> {
+  async function fetchCatalystsStatus(): Promise<CatalystStatus[]> {
     const count = (await contract.catalystCount()).toNumber()
 
     const urls: string[] = []
@@ -75,18 +80,10 @@ export async function createCatalystStatusComponent(
     return result
   }
 
-  let lastGlobalCatalystStatus: CatalystStatus[] | undefined = undefined
-  let lastGlobalCatalystStatusTime = 0
-
-  async function fetchParcels(): Promise<CatalystParcelsInfo[]> {
-    if (!lastGlobalCatalystStatus || Date.now() - lastGlobalCatalystStatusTime > CATALYST_STATUS_EXPIRATION_TIME) {
-      lastGlobalCatalystStatus = await getGlobalCatalystsStatus()
-      lastGlobalCatalystStatusTime = Date.now()
-    }
-
+  async function fetchParcels(catalysts: CatalystStatus[]): Promise<CatalystParcelsInfo[]> {
     const result: CatalystParcelsInfo[] = []
     await Promise.all(
-      lastGlobalCatalystStatus.map(async ({ baseUrl, name }) => {
+      catalysts.map(async ({ baseUrl, name }) => {
         try {
           const response = await fetch.fetch(`${baseUrl}/stats/parcels`)
           const data = await response.json()
@@ -102,12 +99,19 @@ export async function createCatalystStatusComponent(
     return result
   }
 
-  let lastParcelsTime: number = 0
+  let lastCatalystsStatusTime = 0
+  let lastCatalystsStatus: CatalystStatus[] | undefined = undefined
+  let lastParcelsTime = 0
   let lastParcels: CatalystParcelsInfo[] | undefined = undefined
 
   async function getParcels(): Promise<[number, CatalystParcelsInfo[]]> {
+    if (!lastCatalystsStatus || Date.now() - lastCatalystsStatusTime > CATALYST_STATUS_EXPIRATION_TIME) {
+      lastCatalystsStatus = await fetchCatalystsStatus()
+      lastCatalystsStatusTime = Date.now()
+    }
+
     if (!lastParcels) {
-      lastParcels = await fetchParcels()
+      lastParcels = await fetchParcels(lastCatalystsStatus)
       lastParcelsTime = Date.now()
     }
 
@@ -117,13 +121,17 @@ export async function createCatalystStatusComponent(
   let updateInterval: NodeJS.Timer | undefined = undefined
 
   async function start() {
-    lastParcels = await fetchParcels()
-    lastParcelsTime = Date.now()
+    setTimeout(() => {
+      getParcels().catch((err) => {
+        logger.error(err)
+      })
 
-    updateInterval = setInterval(async () => {
-      lastParcels = await fetchParcels()
-      lastParcelsTime = Date.now()
-    }, PARCELS_UPDATE_INTERVAL)
+      updateInterval = setInterval(() => {
+        getParcels().catch((err) => {
+          logger.error(err)
+        })
+      }, PARCELS_UPDATE_INTERVAL)
+    })
   }
 
   async function stop() {
@@ -135,6 +143,8 @@ export async function createCatalystStatusComponent(
   return {
     start,
     stop,
-    getParcels
+    getParcels,
+    fetchParcels,
+    fetchCatalystsStatus
   }
 }
