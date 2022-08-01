@@ -43,7 +43,7 @@ describe('catalyst-status-unit', () => {
       const handler = (_?: string): FetchTestResponse => {
         throw new Error('not implemnted')
       }
-      const logs = createLogComponent({})
+      const logs = await createLogComponent({})
       const fetch = createTestFetchComponent(handler)
       const stats = await createCatalystStatusComponent({ logs, fetch, contract })
 
@@ -65,7 +65,7 @@ describe('catalyst-status-unit', () => {
           }
         }
       }
-      const logs = createLogComponent({})
+      const logs = await createLogComponent({})
       const fetch = createTestFetchComponent(handler)
       const stats = await createCatalystStatusComponent({ logs, fetch, contract })
 
@@ -109,7 +109,7 @@ describe('catalyst-status-unit', () => {
         return { status: 500, body: {} }
       }
 
-      const logs = createLogComponent({})
+      const logs = await createLogComponent({})
       const fetch = createTestFetchComponent(handler)
       const stats = await createCatalystStatusComponent({ logs, fetch, contract })
 
