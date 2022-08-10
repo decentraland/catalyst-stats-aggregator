@@ -20,7 +20,18 @@ export async function initComponents(): Promise<AppComponents> {
   const ethNetwork = (await config.getString('ETH_NETWORK')) ?? DEFAULT_ETH_NETWORK
 
   const logs = await createLogComponent({})
-  const server = await createServerComponent<GlobalContext>({ config, logs }, {})
+  const server = await createServerComponent<GlobalContext>(
+    { config, logs },
+    {
+      cors: {
+        origin: true,
+        methods: 'GET,HEAD,POST,PUT,DELETE,CONNECT,TRACE,PATCH',
+        allowedHeaders: ['Cache-Control', 'Content-Type', 'Origin', 'Accept', 'User-Agent', 'X-Upload-Origin'],
+        credentials: true,
+        maxAge: 86400
+      }
+    }
+  )
   const statusChecks = await createStatusCheckComponent({ server, config })
   const fetch = await createFetchComponent()
   const metrics = await createMetricsComponent(metricDeclarations, { server, config })
